@@ -16,10 +16,52 @@ enum FilterType {
 }
 
 enum SortType {
+  priority,
   dateAsc,
   dateDesc,
   category,
   status,
+}
+
+enum Priority {
+  high,
+  medium,
+  low,
+}
+
+extension PriorityExtension on Priority {
+  String get name {
+    switch (this) {
+      case Priority.high:
+        return 'Alta';
+      case Priority.medium:
+        return 'Média';
+      case Priority.low:
+        return 'Baixa';
+    }
+  }
+
+  Color get color {
+    switch (this) {
+      case Priority.high:
+        return Colors.red;
+      case Priority.medium:
+        return Colors.orange;
+      case Priority.low:
+        return Colors.green;
+    }
+  }
+
+  IconData get icon {
+    switch (this) {
+      case Priority.high:
+        return Icons.priority_high;
+      case Priority.medium:
+        return Icons.remove;
+      case Priority.low:
+        return Icons.arrow_downward;
+    }
+  }
 }
 
 class Category {
@@ -44,12 +86,14 @@ class Todo {
   bool isDone;
   Category category;
   DateTime? dueDate;
+  Priority priority;
 
   Todo({
     required this.text,
     this.isDone = false,
     required this.category,
     this.dueDate,
+    this.priority = Priority.medium,
   });
 
   Map<String, dynamic> toJson() => {
@@ -57,6 +101,7 @@ class Todo {
     'isDone': isDone,
     'category': category.toJson(),
     'dueDate': dueDate?.toIso8601String(),
+    'priority': priority.index,
   };
 
   factory Todo.fromJson(Map<String, dynamic> json) => Todo(
@@ -64,6 +109,7 @@ class Todo {
     isDone: json['isDone'],
     category: Category.fromJson(json['category']),
     dueDate: json['dueDate'] != null ? DateTime.parse(json['dueDate']) : null,
+    priority: Priority.values[json['priority'] ?? Priority.medium.index],
   );
 
   String get dueDateText {
@@ -113,6 +159,8 @@ class Todo {
 
   int compareTo(Todo other, SortType sortType) {
     switch (sortType) {
+      case SortType.priority:
+        return priority.index.compareTo(other.priority.index);
       case SortType.dateAsc:
         if (dueDate == null && other.dueDate == null) return 0;
         if (dueDate == null) return 1;
@@ -163,7 +211,8 @@ class _TodoListPageState extends State<TodoListPage> {
   DateTime? _selectedDate;
   FilterType _currentFilter = FilterType.all;
   Category? _filterCategory;
-  SortType _currentSort = SortType.dateAsc;
+  SortType _currentSort = SortType.priority;
+  Priority _selectedPriority = Priority.medium;
 
   static const List<Category> categories = [
     Category(name: 'Pessoal', color: Colors.blue),
@@ -243,6 +292,7 @@ class _TodoListPageState extends State<TodoListPage> {
           text: text,
           category: _selectedCategory,
           dueDate: _selectedDate,
+          priority: _selectedPriority,
         ));
         _selectedDate = null;
       });
@@ -269,6 +319,8 @@ class _TodoListPageState extends State<TodoListPage> {
 
   String _getSortText() {
     switch (_currentSort) {
+      case SortType.priority:
+        return 'Prioridade';
       case SortType.dateAsc:
         return 'Data ↑';
       case SortType.dateDesc:
@@ -296,6 +348,10 @@ class _TodoListPageState extends State<TodoListPage> {
               });
             },
             itemBuilder: (BuildContext context) => [
+              const PopupMenuItem(
+                value: SortType.priority,
+                child: Text('Prioridade'),
+              ),
               const PopupMenuItem(
                 value: SortType.dateAsc,
                 child: Text('Data (mais próxima)'),
@@ -440,6 +496,42 @@ class _TodoListPageState extends State<TodoListPage> {
                         ),
                       ),
                     ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: Priority.values.map((priority) {
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                              child: ChoiceChip(
+                                avatar: Icon(
+                                  priority.icon,
+                                  size: 18,
+                                  color: _selectedPriority == priority
+                                      ? priority.color
+                                      : Colors.grey,
+                                ),
+                                label: Text(priority.name),
+                                selected: _selectedPriority == priority,
+                                selectedColor: priority.color.withOpacity(0.3),
+                                onSelected: (selected) {
+                                  if (selected) {
+                                    setState(() {
+                                      _selectedPriority = priority;
+                                    });
+                                  }
+                                },
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ),
                     const SizedBox(width: 8),
                     OutlinedButton.icon(
                       onPressed: () => _selectDate(context),
@@ -472,9 +564,20 @@ class _TodoListPageState extends State<TodoListPage> {
               itemBuilder: (context, index) {
                 final todo = _filteredAndSortedTodos[index];
                 return ListTile(
-                  leading: Checkbox(
-                    value: todo.isDone,
-                    onChanged: (_) => _toggleTodo(index),
+                  leading: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        todo.priority.icon,
+                        color: todo.priority.color,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Checkbox(
+                        value: todo.isDone,
+                        onChanged: (_) => _toggleTodo(index),
+                      ),
+                    ],
                   ),
                   title: Text(
                     todo.text,
