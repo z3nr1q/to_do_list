@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'package:intl/intl.dart';
 
 void main() {
   runApp(const MyApp());
@@ -27,24 +28,60 @@ class Todo {
   String text;
   bool isDone;
   Category category;
+  DateTime? dueDate;
 
   Todo({
     required this.text,
     this.isDone = false,
     required this.category,
+    this.dueDate,
   });
 
   Map<String, dynamic> toJson() => {
     'text': text,
     'isDone': isDone,
     'category': category.toJson(),
+    'dueDate': dueDate?.toIso8601String(),
   };
 
   factory Todo.fromJson(Map<String, dynamic> json) => Todo(
     text: json['text'],
     isDone: json['isDone'],
     category: Category.fromJson(json['category']),
+    dueDate: json['dueDate'] != null ? DateTime.parse(json['dueDate']) : null,
   );
+
+  String get dueDateText {
+    if (dueDate == null) return 'Sem data';
+    
+    final now = DateTime.now();
+    final difference = dueDate!.difference(now);
+    
+    if (difference.isNegative) {
+      return 'Atrasada';
+    } else if (difference.inDays == 0) {
+      return 'Hoje';
+    } else if (difference.inDays == 1) {
+      return 'Amanhã';
+    } else {
+      return DateFormat('dd/MM/yyyy').format(dueDate!);
+    }
+  }
+
+  Color get dueDateColor {
+    if (dueDate == null) return Colors.grey;
+    
+    final now = DateTime.now();
+    final difference = dueDate!.difference(now);
+    
+    if (difference.isNegative) {
+      return Colors.red;
+    } else if (difference.inDays <= 1) {
+      return Colors.orange;
+    } else {
+      return Colors.green;
+    }
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -75,6 +112,7 @@ class _TodoListPageState extends State<TodoListPage> {
   final TextEditingController _controller = TextEditingController();
   static const String _todosKey = 'todos_key';
   Category _selectedCategory = categories[0];
+  DateTime? _selectedDate;
 
   static const List<Category> categories = [
     Category(name: 'Pessoal', color: Colors.blue),
@@ -109,13 +147,29 @@ class _TodoListPageState extends State<TodoListPage> {
     await prefs.setStringList(_todosKey, todosJson);
   }
 
+  Future<void> _selectDate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate ?? DateTime.now(),
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (picked != null) {
+      setState(() {
+        _selectedDate = picked;
+      });
+    }
+  }
+
   void _addTodo(String text) {
     if (text.isNotEmpty) {
       setState(() {
         _todos.add(Todo(
           text: text,
           category: _selectedCategory,
+          dueDate: _selectedDate,
         ));
+        _selectedDate = null;
       });
       _saveTodos();
       _controller.clear();
@@ -169,27 +223,43 @@ class _TodoListPageState extends State<TodoListPage> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: categories.map((category) {
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: ChoiceChip(
-                          label: Text(category.name),
-                          selected: _selectedCategory.name == category.name,
-                          selectedColor: category.color.withOpacity(0.3),
-                          onSelected: (selected) {
-                            if (selected) {
-                              setState(() {
-                                _selectedCategory = category;
-                              });
-                            }
-                          },
+                Row(
+                  children: [
+                    Expanded(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: categories.map((category) {
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                              child: ChoiceChip(
+                                label: Text(category.name),
+                                selected: _selectedCategory.name == category.name,
+                                selectedColor: category.color.withOpacity(0.3),
+                                onSelected: (selected) {
+                                  if (selected) {
+                                    setState(() {
+                                      _selectedCategory = category;
+                                    });
+                                  }
+                                },
+                              ),
+                            );
+                          }).toList(),
                         ),
-                      );
-                    }).toList(),
-                  ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    OutlinedButton.icon(
+                      onPressed: () => _selectDate(context),
+                      icon: const Icon(Icons.calendar_today),
+                      label: Text(
+                        _selectedDate != null
+                            ? DateFormat('dd/MM/yyyy').format(_selectedDate!)
+                            : 'Data',
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -226,6 +296,24 @@ class _TodoListPageState extends State<TodoListPage> {
                           todo.category.name,
                           style: TextStyle(
                             color: todo.category.color,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: todo.dueDateColor.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          todo.dueDateText,
+                          style: TextStyle(
+                            color: todo.dueDateColor,
                             fontSize: 12,
                           ),
                         ),
