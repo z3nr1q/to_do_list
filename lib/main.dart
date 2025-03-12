@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   runApp(const MyApp());
@@ -30,12 +31,36 @@ class TodoListPage extends StatefulWidget {
 class _TodoListPageState extends State<TodoListPage> {
   final List<String> _todos = [];
   final TextEditingController _controller = TextEditingController();
+  static const String _todosKey = 'todos_key';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTodos();
+  }
+
+  Future<void> _loadTodos() async {
+    final prefs = await SharedPreferences.getInstance();
+    final todosJson = prefs.getStringList(_todosKey);
+    if (todosJson != null) {
+      setState(() {
+        _todos.clear();
+        _todos.addAll(todosJson);
+      });
+    }
+  }
+
+  Future<void> _saveTodos() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_todosKey, _todos);
+  }
 
   void _addTodo(String todo) {
     if (todo.isNotEmpty) {
       setState(() {
         _todos.add(todo);
       });
+      _saveTodos();
       _controller.clear();
     }
   }
@@ -44,6 +69,7 @@ class _TodoListPageState extends State<TodoListPage> {
     setState(() {
       _todos.removeAt(index);
     });
+    _saveTodos();
   }
 
   @override
@@ -66,6 +92,7 @@ class _TodoListPageState extends State<TodoListPage> {
                       hintText: 'Digite uma nova tarefa',
                       border: OutlineInputBorder(),
                     ),
+                    onSubmitted: _addTodo,
                   ),
                 ),
                 const SizedBox(width: 8),
