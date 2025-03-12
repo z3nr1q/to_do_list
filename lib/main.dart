@@ -15,6 +15,13 @@ enum FilterType {
   overdue,
 }
 
+enum SortType {
+  dateAsc,
+  dateDesc,
+  category,
+  status,
+}
+
 class Category {
   final String name;
   final Color color;
@@ -103,6 +110,26 @@ class Todo {
         dueDate!.month == now.month &&
         dueDate!.day == now.day;
   }
+
+  int compareTo(Todo other, SortType sortType) {
+    switch (sortType) {
+      case SortType.dateAsc:
+        if (dueDate == null && other.dueDate == null) return 0;
+        if (dueDate == null) return 1;
+        if (other.dueDate == null) return -1;
+        return dueDate!.compareTo(other.dueDate!);
+      case SortType.dateDesc:
+        if (dueDate == null && other.dueDate == null) return 0;
+        if (dueDate == null) return 1;
+        if (other.dueDate == null) return -1;
+        return other.dueDate!.compareTo(dueDate!);
+      case SortType.category:
+        return category.name.compareTo(other.category.name);
+      case SortType.status:
+        if (isDone == other.isDone) return 0;
+        return isDone ? 1 : -1;
+    }
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -136,6 +163,7 @@ class _TodoListPageState extends State<TodoListPage> {
   DateTime? _selectedDate;
   FilterType _currentFilter = FilterType.all;
   Category? _filterCategory;
+  SortType _currentSort = SortType.dateAsc;
 
   static const List<Category> categories = [
     Category(name: 'Pessoal', color: Colors.blue),
@@ -151,8 +179,8 @@ class _TodoListPageState extends State<TodoListPage> {
     _loadTodos();
   }
 
-  List<Todo> get _filteredTodos {
-    return _todos.where((todo) {
+  List<Todo> get _filteredAndSortedTodos {
+    final filtered = _todos.where((todo) {
       if (_filterCategory != null && todo.category.name != _filterCategory!.name) {
         return false;
       }
@@ -170,6 +198,9 @@ class _TodoListPageState extends State<TodoListPage> {
           return todo.isOverdue();
       }
     }).toList();
+
+    filtered.sort((a, b) => a.compareTo(b, _currentSort));
+    return filtered;
   }
 
   Future<void> _loadTodos() async {
@@ -221,7 +252,7 @@ class _TodoListPageState extends State<TodoListPage> {
   }
 
   void _toggleTodo(int index) {
-    final todoIndex = _todos.indexOf(_filteredTodos[index]);
+    final todoIndex = _todos.indexOf(_filteredAndSortedTodos[index]);
     setState(() {
       _todos[todoIndex].isDone = !_todos[todoIndex].isDone;
     });
@@ -229,11 +260,24 @@ class _TodoListPageState extends State<TodoListPage> {
   }
 
   void _removeTodo(int index) {
-    final todoIndex = _todos.indexOf(_filteredTodos[index]);
+    final todoIndex = _todos.indexOf(_filteredAndSortedTodos[index]);
     setState(() {
       _todos.removeAt(todoIndex);
     });
     _saveTodos();
+  }
+
+  String _getSortText() {
+    switch (_currentSort) {
+      case SortType.dateAsc:
+        return 'Data ↑';
+      case SortType.dateDesc:
+        return 'Data ↓';
+      case SortType.category:
+        return 'Categoria';
+      case SortType.status:
+        return 'Status';
+    }
   }
 
   @override
@@ -243,8 +287,36 @@ class _TodoListPageState extends State<TodoListPage> {
         title: const Text('Minhas Tarefas'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
+          PopupMenuButton<SortType>(
+            icon: const Icon(Icons.sort),
+            tooltip: 'Ordenar por',
+            onSelected: (SortType sort) {
+              setState(() {
+                _currentSort = sort;
+              });
+            },
+            itemBuilder: (BuildContext context) => [
+              const PopupMenuItem(
+                value: SortType.dateAsc,
+                child: Text('Data (mais próxima)'),
+              ),
+              const PopupMenuItem(
+                value: SortType.dateDesc,
+                child: Text('Data (mais distante)'),
+              ),
+              const PopupMenuItem(
+                value: SortType.category,
+                child: Text('Categoria'),
+              ),
+              const PopupMenuItem(
+                value: SortType.status,
+                child: Text('Status'),
+              ),
+            ],
+          ),
           PopupMenuButton<FilterType>(
             icon: const Icon(Icons.filter_list),
+            tooltip: 'Filtrar por',
             onSelected: (FilterType filter) {
               setState(() {
                 _currentFilter = filter;
@@ -380,14 +452,25 @@ class _TodoListPageState extends State<TodoListPage> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(Icons.sort, size: 16),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Ordenado por: ${_getSortText()}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
           Expanded(
             child: ListView.builder(
-              itemCount: _filteredTodos.length,
+              itemCount: _filteredAndSortedTodos.length,
               itemBuilder: (context, index) {
-                final todo = _filteredTodos[index];
+                final todo = _filteredAndSortedTodos[index];
                 return ListTile(
                   leading: Checkbox(
                     value: todo.isDone,
