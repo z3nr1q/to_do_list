@@ -7,6 +7,14 @@ void main() {
   runApp(const MyApp());
 }
 
+enum FilterType {
+  all,
+  pending,
+  completed,
+  today,
+  overdue,
+}
+
 class Category {
   final String name;
   final Color color;
@@ -82,6 +90,19 @@ class Todo {
       return Colors.green;
     }
   }
+
+  bool isOverdue() {
+    if (dueDate == null) return false;
+    return DateTime.now().isAfter(dueDate!);
+  }
+
+  bool isToday() {
+    if (dueDate == null) return false;
+    final now = DateTime.now();
+    return dueDate!.year == now.year &&
+        dueDate!.month == now.month &&
+        dueDate!.day == now.day;
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -113,6 +134,8 @@ class _TodoListPageState extends State<TodoListPage> {
   static const String _todosKey = 'todos_key';
   Category _selectedCategory = categories[0];
   DateTime? _selectedDate;
+  FilterType _currentFilter = FilterType.all;
+  Category? _filterCategory;
 
   static const List<Category> categories = [
     Category(name: 'Pessoal', color: Colors.blue),
@@ -126,6 +149,27 @@ class _TodoListPageState extends State<TodoListPage> {
   void initState() {
     super.initState();
     _loadTodos();
+  }
+
+  List<Todo> get _filteredTodos {
+    return _todos.where((todo) {
+      if (_filterCategory != null && todo.category.name != _filterCategory!.name) {
+        return false;
+      }
+
+      switch (_currentFilter) {
+        case FilterType.all:
+          return true;
+        case FilterType.pending:
+          return !todo.isDone;
+        case FilterType.completed:
+          return todo.isDone;
+        case FilterType.today:
+          return todo.isToday();
+        case FilterType.overdue:
+          return todo.isOverdue();
+      }
+    }).toList();
   }
 
   Future<void> _loadTodos() async {
@@ -177,15 +221,17 @@ class _TodoListPageState extends State<TodoListPage> {
   }
 
   void _toggleTodo(int index) {
+    final todoIndex = _todos.indexOf(_filteredTodos[index]);
     setState(() {
-      _todos[index].isDone = !_todos[index].isDone;
+      _todos[todoIndex].isDone = !_todos[todoIndex].isDone;
     });
     _saveTodos();
   }
 
   void _removeTodo(int index) {
+    final todoIndex = _todos.indexOf(_filteredTodos[index]);
     setState(() {
-      _todos.removeAt(index);
+      _todos.removeAt(todoIndex);
     });
     _saveTodos();
   }
@@ -196,6 +242,38 @@ class _TodoListPageState extends State<TodoListPage> {
       appBar: AppBar(
         title: const Text('Minhas Tarefas'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        actions: [
+          PopupMenuButton<FilterType>(
+            icon: const Icon(Icons.filter_list),
+            onSelected: (FilterType filter) {
+              setState(() {
+                _currentFilter = filter;
+              });
+            },
+            itemBuilder: (BuildContext context) => [
+              const PopupMenuItem(
+                value: FilterType.all,
+                child: Text('Todas'),
+              ),
+              const PopupMenuItem(
+                value: FilterType.pending,
+                child: Text('Pendentes'),
+              ),
+              const PopupMenuItem(
+                value: FilterType.completed,
+                child: Text('Concluídas'),
+              ),
+              const PopupMenuItem(
+                value: FilterType.today,
+                child: Text('Para hoje'),
+              ),
+              const PopupMenuItem(
+                value: FilterType.overdue,
+                child: Text('Atrasadas'),
+              ),
+            ],
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -219,6 +297,47 @@ class _TodoListPageState extends State<TodoListPage> {
                     ElevatedButton(
                       onPressed: () => _addTodo(_controller.text),
                       child: const Text('Adicionar'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                              child: FilterChip(
+                                label: const Text('Todas'),
+                                selected: _filterCategory == null,
+                                onSelected: (selected) {
+                                  setState(() {
+                                    _filterCategory = null;
+                                  });
+                                },
+                              ),
+                            ),
+                            ...categories.map((category) {
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                child: FilterChip(
+                                  label: Text(category.name),
+                                  selected: _filterCategory?.name == category.name,
+                                  selectedColor: category.color.withOpacity(0.3),
+                                  onSelected: (selected) {
+                                    setState(() {
+                                      _filterCategory = selected ? category : null;
+                                    });
+                                  },
+                                ),
+                              );
+                            }).toList(),
+                          ],
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -266,9 +385,9 @@ class _TodoListPageState extends State<TodoListPage> {
           ),
           Expanded(
             child: ListView.builder(
-              itemCount: _todos.length,
+              itemCount: _filteredTodos.length,
               itemBuilder: (context, index) {
-                final todo = _todos[index];
+                final todo = _filteredTodos[index];
                 return ListTile(
                   leading: Checkbox(
                     value: todo.isDone,
